@@ -29,6 +29,7 @@ module uart_rx (
     logic [7:0] sample_reg;
     logic [3:0] bit_index;
     logic [7:0] phase_cnt;
+    logic [7:0] sample_cnt;
     logic [7:0] osr_mid;
     logic       parity_calc;
     logic       parity_sample;
@@ -58,6 +59,7 @@ module uart_rx (
             sample_reg    <= '0;
             bit_index     <= '0;
             phase_cnt     <= '0;
+            sample_cnt    <= '0;
             parity_calc   <= 1'b0;
             parity_sample <= 1'b0;
             stop_count    <= '0;
@@ -72,9 +74,10 @@ module uart_rx (
 
             if (!enable || !rx_enable) begin
                 state      <= ST_IDLE;
-                phase_cnt  <= '0;
-                bit_index  <= '0;
-                parity_calc <= 1'b0;
+                    phase_cnt  <= '0;
+                    sample_cnt <= '0;
+                    bit_index  <= '0;
+                    parity_calc <= 1'b0;
             end
 
             case (state)
@@ -95,6 +98,7 @@ module uart_rx (
                                 phase_cnt   <= 8'd0;
                                 bit_index   <= 4'd0;
                                 parity_calc <= 1'b0;
+                                sample_cnt  <= osr_value - 8'd1;
                                 state       <= ST_DATA;
                             end else begin
                                 state <= ST_IDLE;
@@ -104,13 +108,10 @@ module uart_rx (
                 end
                 ST_DATA: begin
                     if (osr_tick) begin
-                        phase_cnt <= phase_cnt + 8'd1;
-                        if (phase_cnt == osr_mid - 8'd1) begin
+                        if (sample_cnt == 8'd0) begin
                             sample_reg[bit_index[2:0]] <= rxd;
                             parity_calc <= parity_calc ^ rxd;
-                        end
-                        if (phase_cnt == osr_value - 8'd1) begin
-                            phase_cnt <= 8'd0;
+                            sample_cnt  <= osr_value - 8'd1;
                             if (bit_index == data_bits - 4'd1) begin
                                 if (parity_enable) begin
                                     state <= ST_PARITY;
@@ -121,19 +122,18 @@ module uart_rx (
                             end else begin
                                 bit_index <= bit_index + 4'd1;
                             end
+                        end else begin
+                            sample_cnt <= sample_cnt - 8'd1;
                         end
                     end
                 end
                 ST_PARITY: begin
                     if (osr_tick) begin
-                        phase_cnt <= phase_cnt + 8'd1;
-                        if (phase_cnt == osr_mid - 8'd1) begin
+                        if (sample_cnt == 8'd0) begin
                             parity_sample <= rxd;
-                        end
-                        if (phase_cnt == osr_value - 8'd1) begin
-                            phase_cnt <= 8'd0;
-                            stop_count <= 2'd0;
-                            state <= ST_STOP;
+                            sample_cnt    <= osr_value - 8'd1;
+                            stop_count    <= 2'd0;
+                            state         <= ST_STOP;
                             if (parity_enable) begin
                                 logic expected;
                                 expected = parity_odd ? ~parity_calc : parity_calc;
@@ -141,26 +141,27 @@ module uart_rx (
                                     parity_error <= 1'b1;
                                 end
                             end
+                        end else begin
+                            sample_cnt <= sample_cnt - 8'd1;
                         end
                     end
                 end
                 ST_STOP: begin
                     if (osr_tick) begin
-                        phase_cnt <= phase_cnt + 8'd1;
-                        if (phase_cnt == osr_mid - 8'd1) begin
+                        if (sample_cnt == 8'd0) begin
                             if (rxd == 1'b0) begin
                                 framing_error <= 1'b1;
                             end
-                        end
-                        if (phase_cnt == osr_value - 8'd1) begin
-                            phase_cnt <= 8'd0;
                             if (stop_2 && (stop_count == 2'd0)) begin
                                 stop_count <= 2'd1;
+                                sample_cnt <= osr_value - 8'd1;
                             end else begin
                                 state      <= ST_IDLE;
                                 data_out   <= sample_reg;
                                 data_valid <= 1'b1;
                             end
+                        end else begin
+                            sample_cnt <= sample_cnt - 8'd1;
                         end
                     end
                 end
