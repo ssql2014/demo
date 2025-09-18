@@ -423,6 +423,7 @@ module uart_apb #(
     assign rx_done_event = rx_fifo_wr_en;
 
     logic [7:0] int_set_mask;
+    logic [7:0] int_clear_mask;
     always_comb begin
         int_set_mask = 8'd0;
         if (rx_trig_event)    int_set_mask[0] = 1'b1;
@@ -435,18 +436,14 @@ module uart_apb #(
         if (tx_done_pulse)    int_set_mask[7] = 1'b1;
     end
 
+    assign int_clear_mask = (apb_write && (addr_q == ADDR_INT_STATUS)) ? PWDATA[7:0] :
+                            (apb_write && (addr_q == ADDR_INT_CLEAR))  ? PWDATA[7:0] : 8'd0;
+
     always_ff @(posedge PCLK or negedge PRESETn) begin
         if (!PRESETn) begin
             reg_int_status <= 8'd0;
         end else begin
-            logic [7:0] next_status;
-            next_status = reg_int_status | int_set_mask;
-            if (apb_write && (addr_q == ADDR_INT_STATUS)) begin
-                next_status &= ~PWDATA[7:0];
-            end else if (apb_write && (addr_q == ADDR_INT_CLEAR)) begin
-                next_status &= ~PWDATA[7:0];
-            end
-            reg_int_status <= next_status;
+            reg_int_status <= (reg_int_status | int_set_mask) & ~int_clear_mask;
         end
     end
 

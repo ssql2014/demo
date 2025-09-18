@@ -40,12 +40,11 @@ module uart_tx (
     assign txd        = txd_reg;
     assign tx_done    = tx_done_reg;
 
-    function automatic logic compute_parity(input logic [7:0] data, input logic [3:0] bits, input logic odd);
+    function automatic logic compute_parity(input logic [7:0] data,
+                                            input logic        data_len_is_7bit,
+                                            input logic        odd);
         logic parity;
-        parity = 1'b0;
-        for (int i = 0; i < 8; i++) begin
-            if (i < bits) parity ^= data[i];
-        end
+        parity = data_len_is_7bit ? ^data[6:0] : ^data;
         compute_parity = odd ? ~parity : parity;
     endfunction
 
@@ -69,7 +68,7 @@ module uart_tx (
                     txd_reg <= 1'b1;
                     if (data_valid) begin
                         shift_reg  <= data_in;
-                        parity_bit <= compute_parity(data_in, data_bits, parity_odd);
+                        parity_bit <= compute_parity(data_in, data_len_7bit, parity_odd);
                         bit_index  <= 4'd0;
                         state      <= ST_START;
                     end
