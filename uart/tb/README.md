@@ -10,6 +10,10 @@ A lightweight SystemVerilog testbench (`uart_tb.sv`) exercises the APB register 
 
 # From repo root
 mkdir -p build
+# From repo root (preferred)
+./uart/scripts/run_sim.sh
+
+# Manual compile/run if you need custom arguments
 iverilog -g2012 -o build/uart_tb.vvp \
   uart/rtl/uart_apb.sv \
   uart/rtl/uart_tx.sv \
