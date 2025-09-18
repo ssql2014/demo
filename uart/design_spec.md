@@ -22,7 +22,8 @@ flowchart LR
     TX --> TXD["TXD (serial out)"]
     RXD["RXD (serial in)"] --> RX
     RX --> FIFO_RX
-    FIFO_RX --> INT["Interrupt Logic"]
+    RX --> INT["Interrupt Logic"]
+    FIFO_RX --> INT
     FIFO_TX --> INT
     REG --> INT
 ```
@@ -77,25 +78,25 @@ flowchart TD
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    IDLE --> LOAD : Data in FIFO
-    LOAD --> START : Assert start bit
-    START --> DATA : Shift out data bits
-    DATA --> PARITY : If parity enabled
-    DATA --> STOP : If no parity
-    PARITY --> STOP
-    STOP --> IDLE : Transmission done
+    IDLE --> LOAD : !tx_fifo_empty
+    LOAD --> START : Assert start bit (0)
+    START --> DATA : Shift data[i]
+    DATA --> PARITY : Shift parity bit (if enabled)
+    DATA --> STOP : Shift stop bit(s) (if no parity)
+    PARITY --> STOP : Shift stop bit(s)
+    STOP --> IDLE : Transmission complete
 ```
 
 ### RX FSM
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    IDLE --> START : Detect start bit
-    START --> DATA : Sample data bits
-    DATA --> PARITY : If parity enabled
-    DATA --> STOP : If no parity
-    PARITY --> STOP
-    STOP --> IDLE : Store data, check errors
+    IDLE --> START : rxd_falling_edge
+    START --> DATA : Sample data bits at center
+    DATA --> PARITY : Sample parity bit (if enabled)
+    DATA --> STOP : Sample stop bit (if no parity)
+    PARITY --> STOP : Sample stop bit
+    STOP --> IDLE : Store byte, check errors
 ```
 
 ## 7. Timing Diagrams
@@ -162,6 +163,6 @@ sequenceDiagram
 - **Coverage**:
     - Functional: All register fields, FIFO levels, interrupts, errors.
     - Code: Statement, branch, FSM state coverage.
-- **Corner Cases**: FIFO full/empty, RX noise, break, framing/parity errors.
+- **Corner Cases**: FIFO full/empty, RX noise, break, framing/parity errors, back-to-back transfers, reset during active transfer, baud rate clock vs. system clock.
 - **Loopback**: Internal loopback mode for self-check.
 - **Timing**: Baud rate accuracy, setup/hold on APB.
