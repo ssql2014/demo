@@ -1,0 +1,10 @@
+# Yosys synthesis script for UART APB top
+read_verilog -sv rtl/uart_baud_gen.sv rtl/uart_fifo.sv rtl/uart_tx.sv rtl/uart_rx.sv rtl/uart_apb.sv
+hierarchy -check -top uart_apb
+proc; opt; fsm; opt
+memory_dff; memory_share; opt
+techmap; opt
+abc -fast
+clean
+write_json build/synth/uart_apb.json
+write_verilog -noattr build/synth/uart_apb_syn.v

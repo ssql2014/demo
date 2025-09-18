@@ -10,21 +10,21 @@
 
 | Environment | Description | Status |
 |-------------|-------------|--------|
-| SystemVerilog self-checking testbench | APB stimulus tasks, internal loopback, scoreboard for TX→RX checking. | Implemented (`tb/uart_tb.sv`). |
-| Directed scenario benches | Focus on parity, stop bits, error injection; derived from base bench with parameter overrides. | Planned. |
+| SystemVerilog self-checking testbench | APB stimulus tasks, internal loopback, scoreboard for TX→RX checking. | Implemented (`tb/uart_tb_base.sv`). |
+| Directed scenario benches | Focus on parity, stop bits, error injection; derived from base bench with parameter overrides. | Implemented (`tb/uart_tb_<case>.sv`). |
 | (Optional) UVM environment | Full APB agent, coverage-driven sequences, scoreboard mirroring reference model. | Future enhancement. |
 
 ## 3. Test Matrix
 
-| ID | Name | Description | Coverage Goals |
-|----|------|-------------|----------------|
-| T0 | Smoke loopback | Base regression: enable loopback, transmit pattern, ensure RX path/flags/IRQs behave. | Sanity of TX/RX datapath, APB DATA accesses, RX trigger interrupt. |
-| T1 | Parity modes | Sweep `PARITY_EN` with even/odd, verify expected parity bits and interrupt on mismatches (inject fault). | Parity FSM, INT bits, sticky error flags. |
-| T2 | Stop-bit variations | Exercise 1-stop and 2-stop configurations, ensure RX tolerance and TX framing. | Stop sequencing, STATUS.IDLE/ BUSY flags. |
-| T3 | FIFO depth stress | Fill/empty FIFOs to boundaries, assert overflow/underflow reporting. | STATUS.RX_FULL/TX_FULL, OE errors. |
-| T4 | Baud/OSR sweep | Vary divisors/OSR selection, confirm sampling alignment and throughput. | Baud generator operation, RX sampling counter. |
-| T5 | CTS/RTS flow control (if enabled) | Gate TX on CTS, drive RTS thresholds. | Flow-control handshake. |
-| T6 | Timeout interrupt | Configure timeout, idle RX line to trigger `RX_TIMEOUT_INT`. | Timeout counter, interrupt clears. |
+| ID | Name | Description | Coverage Goals | Status |
+|----|------|-------------|----------------|--------|
+| T0 | Smoke loopback | Base regression: enable loopback, transmit pattern, ensure RX path/flags/IRQs behave. | Sanity of TX/RX datapath, APB DATA accesses, RX trigger interrupt. | Automated (`run_sim.sh`) |
+| T1 | Parity modes | Sweep `PARITY_EN` with even/odd, verify expected parity bits and interrupt on mismatches (inject fault). | Parity FSM, INT bits, sticky error flags. | Automated (`parity_error`) |
+| T2 | Stop-bit variations | Exercise 1-stop and 2-stop configurations, ensure RX tolerance and TX framing. | Stop sequencing, STATUS.IDLE/ BUSY flags. | Automated (`stop_bits`) |
+| T3 | FIFO depth stress | Fill/empty FIFOs to boundaries, assert overflow/underflow reporting. | STATUS.RX_FULL/TX_FULL, OE errors. | Automated (`rx_overflow`) |
+| T4 | Baud/OSR sweep | Vary divisors/OSR selection, confirm sampling alignment and throughput. | Baud generator operation, RX sampling counter. | Automated (`baud_sweep`) |
+| T5 | CTS/RTS flow control (if enabled) | Gate TX on CTS, drive RTS thresholds. | Flow-control handshake. | Automated (`flow_control`) |
+| T6 | Timeout interrupt | Configure timeout, idle RX line to trigger `RX_TIMEOUT_INT`. | Timeout counter, interrupt clears. | Automated (`rx_timeout`) |
 
 ## 4. Stimulus Strategy
 - APB driver tasks provide cycle-accurate read/write sequencing and can be reused across benches.
@@ -45,7 +45,7 @@
 - Code coverage targeted via simulator reports; aim for 95%+ line/branch.
 
 ## 7. Regression Strategy
-- Tier-0: `scripts/run_sim.sh` smoke test (CI friendly, <1 min) using Icarus Verilog.
+        - Tier-0: `scripts/run_sim.sh` smoke/regression (CI friendly, <1 min) using Icarus Verilog; compiles per-test top (`uart_tb_<case>.sv`) and archives logs under `uart/out/<case>/`.
 - Tier-1: Extended directed benches executed sequentially.
 - Tier-2: When UVM environment available, randomized regression with seed logging.
 
@@ -57,7 +57,6 @@
 
 ## 9. Schedule & Ownership
 - Smoke test (T0) — completed.
-- Parity/stop/FIFO stress scenarios — pending; target next milestone.
-- Timeout and flow control tests — aligned with feature implementation.
+- Stop-bit, FIFO overflow, parity, timeout, flow-control, and baud sweep scenarii — automated via directed benches.
+- Additional corner cases (e.g., fractional baud, underflow) — pending.
 - UVM expansion — optional, contingent on tool availability.
-

@@ -3,23 +3,25 @@ set -euo pipefail
 
 usage() {
   cat <<USAGE
-Usage: $(basename "$0") [--top uart_tb] [--build-dir build] [--sim vvp]
+Usage: $(basename "$0") [--build-dir build] [--sim vvp] \\
+                    [--log-dir out] [--testcases list]
 
-Compiles the UART RTL plus the SystemVerilog smoke testbench and runs it using
-Icarus Verilog (iverilog/vvp) by default.
+Compiles the UART RTL plus the SystemVerilog regression testbench and runs
+each requested testcase using Icarus Verilog (iverilog/vvp) by default.
 
 Environment:
   IVERILOG     Override iverilog binary (default: iverilog)
   VVP          Override vvp binary (default: vvp)
 
 Outputs:
-  Builds <build-dir>/uart_tb.vvp and writes simulation transcript to stdout.
+  Builds <build-dir>/<test>.vvp and stores logs under <log-dir>/<test>/sim.log.
 USAGE
 }
 
-TOP="uart_tb"
 BUILD_DIR="build"
 SIM_BIN="vvp"
+LOG_DIR="out"
+TESTCASE_LIST="reg_access,loopback,parity_error,stop_bits,rx_overflow,rx_timeout,baud_sweep,flow_control"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,16 +29,20 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
-    --top)
-      TOP="$2"
-      shift 2
-      ;;
     --build-dir)
       BUILD_DIR="$2"
       shift 2
       ;;
     --sim)
       SIM_BIN="$2"
+      shift 2
+      ;;
+    --log-dir)
+      LOG_DIR="$2"
+      shift 2
+      ;;
+    --testcases)
+      TESTCASE_LIST="$2"
       shift 2
       ;;
     *)
@@ -63,6 +69,12 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UART_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+TESTCASE_LIST=${TESTCASE_LIST//,/ }
+read -r -a TESTCASES <<< "$TESTCASE_LIST"
+if [[ ${#TESTCASES[@]} -eq 0 ]]; then
+  TESTCASES=(loopback)
+fi
+
 SRC_RTL=(
   "$UART_ROOT/rtl/uart_apb.sv"
   "$UART_ROOT/rtl/uart_tx.sv"
@@ -71,16 +83,39 @@ SRC_RTL=(
   "$UART_ROOT/rtl/uart_baud_gen.sv"
 )
 
-TB_SRC="$UART_ROOT/tb/${TOP}.sv"
-if [[ ! -f "$TB_SRC" ]]; then
-  echo "Error: testbench '$TB_SRC' not found" >&2
+TB_BASE="$UART_ROOT/tb/uart_tb_base.sv"
+if [[ ! -f "$TB_BASE" ]]; then
+  echo "Error: base testbench '$TB_BASE' not found" >&2
   exit 1
 fi
 
-mkdir -p "$UART_ROOT/$BUILD_DIR"
-ELAB_OUT="$UART_ROOT/$BUILD_DIR/${TOP}.vvp"
+mkdir -p "$UART_ROOT/$BUILD_DIR" "$UART_ROOT/$LOG_DIR"
+failures=0
 
-set -x
-"$IVERILOG_BIN" -g2012 -o "$ELAB_OUT" "${SRC_RTL[@]}" "$TB_SRC"
-"$VVP_BIN" "$ELAB_OUT"
-set +x
+for test in "${TESTCASES[@]}"; do
+  TB_TOP="$UART_ROOT/tb/uart_tb_${test}.sv"
+  if [[ ! -f "$TB_TOP" ]]; then
+    echo "Error: testcase source '$TB_TOP' not found" >&2
+    exit 1
+  fi
+
+  ELAB_OUT="$UART_ROOT/$BUILD_DIR/${test}.vvp"
+  OUT_PATH="$UART_ROOT/$LOG_DIR/$test"
+  LOG_FILE="$OUT_PATH/sim.log"
+  mkdir -p "$OUT_PATH"
+
+  echo "Running testcase '$test' (log: $LOG_FILE)"
+
+  set -x
+  "$IVERILOG_BIN" -g2012 -o "$ELAB_OUT" "${SRC_RTL[@]}" "$TB_BASE" "$TB_TOP"
+  set +x
+
+  if "$VVP_BIN" "$ELAB_OUT" >"$LOG_FILE" 2>&1; then
+    echo "[PASS] $test"
+  else
+    echo "[FAIL] $test (see $LOG_FILE)"
+    failures=$((failures + 1))
+  fi
+done
+
+exit $failures

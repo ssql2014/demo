@@ -1,41 +1,46 @@
-# UART RTL Smoke Testbench
+# UART RTL Regression Testbench
 
-A lightweight SystemVerilog testbench (`uart_tb.sv`) exercises the APB register interface and UART datapaths using the built-in loopback mode. The flow is:
+`uart_tb_base.sv` holds the reusable APB/UART stimulus, while each scenario has
+its own top-level wrapper:
 
-1. Apply reset, program a fast baud divisor, set FIFO/interrupt thresholds.
-2. Enable loopback and push four bytes into the TX FIFO via APB writes.
-3. Wait for the RX FIFO to report data, read each byte back, and compare.
+- `uart_tb_reg_access.sv`
+- `uart_tb_loopback.sv`
+- `uart_tb_parity_error.sv`
+- `uart_tb_stop_bits.sv`
+- `uart_tb_rx_overflow.sv`
+- `uart_tb_rx_timeout.sv`
+- `uart_tb_baud_sweep.sv`
+- `uart_tb_flow_control.sv`
 
 ## Running with open-source tools
 
-# From repo root
-mkdir -p build
+```sh
 # From repo root (preferred)
 ./uart/scripts/run_sim.sh
+# Logs are saved under uart/out/<testcase>/sim.log
 
 # Manual compile/run if you need custom arguments
-iverilog -g2012 -o build/uart_tb.vvp \
+mkdir -p build
+iverilog -g2012 -o build/loopback.vvp \
   uart/rtl/uart_apb.sv \
   uart/rtl/uart_tx.sv \
   uart/rtl/uart_rx.sv \
   uart/rtl/uart_fifo.sv \
   uart/rtl/uart_baud_gen.sv \
-  uart/tb/uart_tb.sv
+  uart/tb/uart_tb_base.sv \
+  uart/tb/uart_tb_loopback.sv
 
-vvp build/uart_tb.vvp
+vvp build/loopback.vvp
 ```
 
-Expected output ends with `UART smoke test PASSED`.
+Use `./uart/scripts/run_sim.sh --testcases "loopback parity_error"` to restrict
+to specific scenarios or `--log-dir mylogs` to change the output folder.
 
-If `iverilog` is not installed, use any SystemVerilog-capable simulator and run the same top-level.
-
-## Pseudo C setup sequence
-
-The pseudo-code below mirrors the testbench configuration for firmware bring-up:
+## Pseudo C setup sequence (loopback smoke)
 
 ```c
 // Assume `UART_REG(off)` macro defined as in PRD appendix
-UART_REG(0x0C) = 0x0000_0001;          // BAUD: div_int = 1, div_frac = 0
+UART_REG(0x0C) = 0x0000_0010;          // BAUD: div_int = 16, div_frac = 0
 UART_REG(0x10) = (1u << 2);           // FIFO_CTRL: RX_TRIG = 1 byte
 UART_REG(0x18) = (1u << 0) | (1u << 6); // INT_ENABLE: RX_TRIG + RX_DONE
 UART_REG(0x08) = 0x0000_000F;         // CTRL: enable | RX_EN | TX_EN | LOOPBACK

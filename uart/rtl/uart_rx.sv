@@ -32,7 +32,6 @@ module uart_rx (
     logic [7:0] sample_cnt;
     logic [7:0] osr_mid;
     logic       parity_calc;
-    logic       parity_sample;
     logic [1:0] stop_count;
     logic       rxd_q;
     logic       start_edge;
@@ -61,7 +60,6 @@ module uart_rx (
             phase_cnt     <= '0;
             sample_cnt    <= '0;
             parity_calc   <= 1'b0;
-            parity_sample <= 1'b0;
             stop_count    <= '0;
             data_out      <= '0;
             data_valid    <= 1'b0;
@@ -96,10 +94,10 @@ module uart_rx (
                             if (rxd == 1'b0) begin
                                 sample_reg  <= '0;
                                 phase_cnt   <= 8'd0;
-                                bit_index   <= 4'd0;
-                                parity_calc <= 1'b0;
-                                sample_cnt  <= osr_value - 8'd1;
-                                state       <= ST_DATA;
+                            bit_index   <= 4'd0;
+                            parity_calc <= 1'b0;
+                            sample_cnt  <= osr_value - 8'd1;
+                            state       <= ST_DATA;
                             end else begin
                                 state <= ST_IDLE;
                             end
@@ -130,14 +128,15 @@ module uart_rx (
                 ST_PARITY: begin
                     if (osr_tick) begin
                         if (sample_cnt == 8'd0) begin
-                            parity_sample <= rxd;
+                            logic sampled_parity;
+                            logic expected;
+                            sampled_parity = rxd;
                             sample_cnt    <= osr_value - 8'd1;
                             stop_count    <= 2'd0;
                             state         <= ST_STOP;
                             if (parity_enable) begin
-                                logic expected;
                                 expected = parity_odd ? ~parity_calc : parity_calc;
-                                if (parity_sample != expected) begin
+                                if (sampled_parity != expected) begin
                                     parity_error <= 1'b1;
                                 end
                             end
